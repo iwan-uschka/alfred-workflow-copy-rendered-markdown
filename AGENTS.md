@@ -121,7 +121,7 @@ pandoc's, silently masking a pandoc conversion failure.
   testable Bash. Do not inline logic into `info.plist` — the plist only
   calls `./scripts/copy-rendered-markdown.sh`.
 - After editing the script, lint it: `shellcheck scripts/*.sh build.sh
-  make_release.sh test/*.test.sh` (CI runs the same check).
+  make_release.sh test/*.test.sh`.
 - After editing `info.plist`, validate it: `plutil -lint info.plist`.
 - After editing conversion logic, run `bash
   test/copy-rendered-markdown.test.sh` — and sanity-check the test itself
