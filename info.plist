@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>bundleid</key>
+	<string>com.creativytool.alfred.copy-rendered-markdown</string>
+	<key>category</key>
+	<string>Tools</string>
+	<key>connections</key>
+	<dict>
+		<key>A2B9C981-3847-436F-AA77-C0D7CECCF9EE</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>725DD660-D110-4F8C-A959-999323D8DA99</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+		<key>E05F4C4F-ED14-4067-AE9E-46DD24C95215</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>A2B9C981-3847-436F-AA77-C0D7CECCF9EE</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+	</dict>
+	<key>createdby</key>
+	<string>Christoph Wanja</string>
+	<key>description</key>
+	<string>Convert clipboard markdown to rendered rich text (RTF).</string>
+	<key>disabled</key>
+	<false/>
+	<key>name</key>
+	<string>Copy Rendered Markdown</string>
+	<key>objects</key>
+	<array>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>argumenttype</key>
+				<integer>2</integer>
+				<key>keyword</key>
+				<string>copyrmd</string>
+				<key>subtext</key>
+				<string>Convert clipboard markdown to rich text (RTF)</string>
+				<key>text</key>
+				<string>Copy Rendered Markdown</string>
+				<key>withspace</key>
+				<false/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.input.keyword</string>
+			<key>uid</key>
+			<string>E05F4C4F-ED14-4067-AE9E-46DD24C95215</string>
+			<key>version</key>
+			<integer>1</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>concurrently</key>
+				<false/>
+				<key>escaping</key>
+				<integer>102</integer>
+				<key>script</key>
+				<string>./scripts/copy-rendered-markdown.sh</string>
+				<key>scriptargtype</key>
+				<integer>0</integer>
+				<key>scriptfile</key>
+				<string></string>
+				<key>type</key>
+				<integer>0</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.script</string>
+			<key>uid</key>
+			<string>A2B9C981-3847-436F-AA77-C0D7CECCF9EE</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>lastpathcomponent</key>
+				<false/>
+				<key>onlyshowifquerypopulated</key>
+				<true/>
+				<key>text</key>
+				<string>{query}</string>
+				<key>title</key>
+				<string>Copy Rendered Markdown</string>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.output.notification</string>
+			<key>uid</key>
+			<string>725DD660-D110-4F8C-A959-999323D8DA99</string>
+			<key>version</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>readme</key>
+	<string>Convert whatever markdown is on the clipboard into rendered rich text (RTF),
+in place, so pasting into Teams, Word, Mail, Notes, Slack desktop, etc. shows
+real bold, lists and headings instead of raw markdown syntax.
+
+Usage
+  1. Copy some markdown to the clipboard, from anywhere.
+  2. Trigger Alfred and type: copyrmd
+  3. Paste. A notification confirms the byte count, or reports an error.
+
+Requires pandoc (brew install pandoc). macOS only.</string>
+	<key>uidata</key>
+	<dict>
+		<key>725DD660-D110-4F8C-A959-999323D8DA99</key>
+		<dict>
+			<key>xpos</key>
+			<real>610</real>
+			<key>ypos</key>
+			<real>110</real>
+		</dict>
+		<key>A2B9C981-3847-436F-AA77-C0D7CECCF9EE</key>
+		<dict>
+			<key>xpos</key>
+			<real>360</real>
+			<key>ypos</key>
+			<real>110</real>
+		</dict>
+		<key>E05F4C4F-ED14-4067-AE9E-46DD24C95215</key>
+		<dict>
+			<key>xpos</key>
+			<real>110</real>
+			<key>ypos</key>
+			<real>110</real>
+		</dict>
+	</dict>
+	<key>userconfigurationconfig</key>
+	<array/>
+	<key>variablesdontexport</key>
+	<array/>
+	<key>version</key>
+	<string>1.0.0</string>
+	<key>webaddress</key>
+	<string>https://github.com/iwan-uschka/alfred-workflow-copy-rendered-markdown</string>
+</dict>
+</plist>
