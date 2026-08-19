@@ -10,4 +10,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck scripts/*.sh build.sh make_release.sh
+      - run: shellcheck scripts/*.sh build.sh make_release.sh test/*.test.sh
