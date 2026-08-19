@@ -92,7 +92,7 @@ canvas to match a typical macOS/Alfred app-icon composition.
 - `./build.sh` packages the `.alfredworkflow`.
 - After editing `info.plist`, validate it: `plutil -lint info.plist`.
 - After editing the script, lint it: `shellcheck scripts/*.sh build.sh
-  make_release.sh` (CI runs the same check).
+  make_release.sh test/*.test.sh` (CI runs the same check).
 - Run the test suite: `bash test/copy-rendered-markdown.test.sh`. It runs
   the real script against the real clipboard and pandoc (no mocking — every
   bug found so far only showed up by inspecting actual pasteboard flavors

@@ -36,50 +36,59 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Alfred's notification action only fires on non-empty stdout (the Run
+# Script action's {query}), but every failure here previously wrote only to
+# stderr — so an error exited the script correctly but showed the user
+# nothing at all. Emit the same message on both streams so the documented
+# "reports an error" behavior actually reaches a notification.
+die() { # die <exit-code> <message>
+  echo "ERROR: $2" >&2
+  echo "ERROR: $2"
+  exit "$1"
+}
+
 if ! command -v pandoc >/dev/null 2>&1; then
-  echo "ERROR: pandoc not found on PATH — install it with 'brew install pandoc'" >&2
-  exit 2
+  die 2 "pandoc not found on PATH — install it with 'brew install pandoc'"
 fi
 
 if ! command -v pbpaste >/dev/null 2>&1 || ! command -v osascript >/dev/null 2>&1 || ! command -v perl >/dev/null 2>&1; then
-  echo "ERROR: pbpaste/osascript/perl not found on PATH — macOS only" >&2
-  exit 3
+  die 3 "pbpaste/osascript/perl not found on PATH — macOS only"
 fi
 
-markdown=$(pbpaste)
+if ! markdown=$(pbpaste); then
+  die 1 "could not read clipboard as text (is there non-text content on it?)"
+fi
 
 if [ -z "$markdown" ]; then
-  echo "ERROR: clipboard is empty" >&2
-  exit 1
+  die 1 "clipboard is empty"
 fi
 
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
 
+MD_FORMAT="markdown+hard_line_breaks+lists_without_preceding_blankline"
+
 printf '%s' "$markdown" > "$workdir/input.md"
 
-if ! pandoc -f markdown+hard_line_breaks+lists_without_preceding_blankline -t html "$workdir/input.md" -o "$workdir/raw.html" 2>"$workdir/err"; then
-  echo "ERROR: pandoc HTML conversion failed: $(cat "$workdir/err")" >&2
-  exit 4
+if ! pandoc -f "$MD_FORMAT" -t html "$workdir/input.md" -o "$workdir/raw.html" 2>"$workdir/err"; then
+  die 4 "pandoc HTML conversion failed: $(cat "$workdir/err")"
 fi
 perl "$SCRIPT_DIR/inline-html-styles.pl" < "$workdir/raw.html" > "$workdir/output.html"
 
-if ! pandoc -f markdown+hard_line_breaks+lists_without_preceding_blankline -t rtf -s "$workdir/input.md" -o "$workdir/output.rtf" 2>"$workdir/err"; then
-  echo "ERROR: pandoc RTF conversion failed: $(cat "$workdir/err")" >&2
-  exit 4
+if ! pandoc -f "$MD_FORMAT" -t rtf -s "$workdir/input.md" -o "$workdir/output.rtf" 2>"$workdir/err"; then
+  die 4 "pandoc RTF conversion failed: $(cat "$workdir/err")"
 fi
 
-if ! pandoc -f markdown+hard_line_breaks+lists_without_preceding_blankline -t plain "$workdir/input.md" -o "$workdir/output.txt" 2>"$workdir/err"; then
-  echo "ERROR: pandoc plain-text conversion failed: $(cat "$workdir/err")" >&2
-  exit 4
+if ! pandoc -f "$MD_FORMAT" -t plain "$workdir/input.md" -o "$workdir/output.txt" 2>"$workdir/err"; then
+  die 4 "pandoc plain-text conversion failed: $(cat "$workdir/err")"
 fi
 
 if ! osascript -l JavaScript "$SCRIPT_DIR/write-clipboard.jxa.js" \
     "$workdir/output.html" "$workdir/output.rtf" "$workdir/output.txt" 2>"$workdir/err"; then
-  echo "ERROR: writing the clipboard failed: $(cat "$workdir/err")" >&2
-  exit 5
+  die 5 "writing the clipboard failed: $(cat "$workdir/err")"
 fi
 
 html_bytes=$(wc -c < "$workdir/output.html" | tr -d ' ')
 rtf_bytes=$(wc -c < "$workdir/output.rtf" | tr -d ' ')
-echo "copied as rich text — ${html_bytes} bytes HTML, ${rtf_bytes} bytes RTF"
+txt_bytes=$(wc -c < "$workdir/output.txt" | tr -d ' ')
+echo "copied as rich text — ${html_bytes} bytes HTML, ${rtf_bytes} bytes RTF, ${txt_bytes} bytes plain"

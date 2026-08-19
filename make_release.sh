@@ -24,7 +24,16 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-  echo "error: tag ${TAG} already exists"
+  echo "error: tag ${TAG} already exists locally"
+  exit 1
+fi
+
+if ! remote_tag_check="$(git ls-remote --tags origin "refs/tags/${TAG}" 2>&1)"; then
+  echo "error: could not check origin for existing tags: ${remote_tag_check}"
+  exit 1
+fi
+if [ -n "$remote_tag_check" ]; then
+  echo "error: tag ${TAG} already exists on origin"
   exit 1
 fi
 
@@ -35,7 +44,7 @@ echo "→ Version: ${VERSION} (tag: ${TAG})"
 # top-level key (not the nested per-object version keys).
 BACKUP="$(mktemp)"
 cp info.plist "$BACKUP"
-trap 'cp "$BACKUP" info.plist; rm -f "$BACKUP"' EXIT
+trap 'cp "$BACKUP" info.plist; rm -f "$BACKUP" "$BUILT"' EXIT
 
 plutil -replace version -string "${VERSION}" info.plist
 plutil -lint info.plist

@@ -81,6 +81,7 @@ second call win, not add to the first.
   script) is a no-op on `pbcopy` — `man pbcopy` documents `-Prefer` for
   `pbpaste` only; `pbcopy` sets the RTF flavor by sniffing the `{\rtf1`
   header in the input regardless of the flag.
+
 **Block spacing collapses in paste targets with their own editor CSS — a
 third real, reported bug.** pandoc's HTML fragment emits bare
 `<p>`/`<ul>`/`<ol>`/`<li>` with no attributes, so vertical spacing between
@@ -120,7 +121,7 @@ pandoc's, silently masking a pandoc conversion failure.
   testable Bash. Do not inline logic into `info.plist` — the plist only
   calls `./scripts/copy-rendered-markdown.sh`.
 - After editing the script, lint it: `shellcheck scripts/*.sh build.sh
-  make_release.sh` (CI runs the same check).
+  make_release.sh test/*.test.sh` (CI runs the same check).
 - After editing `info.plist`, validate it: `plutil -lint info.plist`.
 - After editing conversion logic, run `bash
   test/copy-rendered-markdown.test.sh` — and sanity-check the test itself

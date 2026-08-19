@@ -38,7 +38,7 @@
 	<key>createdby</key>
 	<string>Christoph Wanja</string>
 	<key>description</key>
-	<string>Convert clipboard markdown to rendered rich text (RTF).</string>
+	<string>Convert clipboard markdown to rendered rich text (HTML + RTF).</string>
 	<key>disabled</key>
 	<false/>
 	<key>name</key>
@@ -53,7 +53,7 @@
 				<key>keyword</key>
 				<string>copyrmd</string>
 				<key>subtext</key>
-				<string>Convert clipboard markdown to rich text (RTF)</string>
+				<string>Convert clipboard markdown to rich text</string>
 				<key>text</key>
 				<string>Copy Rendered Markdown</string>
 				<key>withspace</key>
@@ -110,7 +110,7 @@
 		</dict>
 	</array>
 	<key>readme</key>
-	<string>Convert whatever markdown is on the clipboard into rendered rich text (RTF),
+	<string>Convert whatever markdown is on the clipboard into rendered rich text,
 in place, so pasting into Teams, Word, Mail, Notes, Slack desktop, etc. shows
 real bold, lists and headings instead of raw markdown syntax.
 
