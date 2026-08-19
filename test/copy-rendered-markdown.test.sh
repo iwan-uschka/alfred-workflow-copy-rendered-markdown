@@ -159,6 +159,7 @@ assert_contains "kitchen sink: table header cell renders" "$html" "<th>Col A</th
 assert_contains "kitchen sink: horizontal rule renders" "$html" "<hr"
 
 refute_contains "kitchen sink: no leftover bold syntax" "$html" "**bold**"
+# shellcheck disable=SC2016 # literal backticks, not meant to expand
 refute_contains "kitchen sink: no leftover inline code syntax" "$html" '`inline code`'
 refute_contains "kitchen sink: no leftover link syntax" "$html" "[link]"
 refute_contains "kitchen sink: no leftover blockquote syntax" "$html" "> a blockquote"
