@@ -54,3 +54,10 @@ reintroduce a dependency on any particular clipboard producer.
 - `build.sh` — zips the workflow into `dist/*.alfredworkflow`.
 - `make_release.sh` — bumps the version, builds the versioned artifact +
   checksum, and prints the release commands to run manually.
+- `icon.png` — bundled automatically by `build.sh` if present (Alfred reads
+  it from the bundle root by convention, no `info.plist` key needed).
+  Derived from `assets/markdown-mark-original.svg` (the official Markdown
+  mark, CC0) via `assets/markdown-mark-square.svg` (re-centered onto a
+  padded square canvas) — regenerate with `qlmanage -t -s 512 -o assets
+  assets/markdown-mark-square.svg` then copy the output over `icon.png`.
+- `assets/` — icon source SVGs, not shipped in the workflow zip.
