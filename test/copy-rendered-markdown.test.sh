@@ -167,6 +167,48 @@ refute_contains "kitchen sink: no leftover bullet syntax" "$html" "- top level"
 refute_contains "kitchen sink: no leftover table pipe syntax" "$html" "| Col A | Col B |"
 refute_contains "kitchen sink: no leftover hr syntax" "$html" "---"
 
+# --- a link whose label is also code-formatted must not carry a nested
+# <code> into the HTML flavor: Atlassian's editor (Jira, Confluence) treats
+# "code" and "link" as mutually exclusive marks and resolves pasted HTML
+# with <code> inside <a> by dropping the link, not the code style — a real,
+# reported bug (confirmed against a real Jira comment box). RTF is left
+# alone: Word/Notes have no such conflict, so the code styling survives
+# there unaffected. ---
+# shellcheck disable=SC2016 # literal backticks, not meant to expand
+printf 'See [`ISSUE-1`](https://example.com/ISSUE-1) for details.\n' | pbcopy
+bash "$SCRIPT" >/dev/null
+html=$(read_html_flavor)
+assert_contains "code-in-link: href survives" "$html" 'href="https://example.com/ISSUE-1"'
+assert_contains "code-in-link: link text survives" "$html" ">ISSUE-1</a>"
+# normalize embedded newlines before matching: pandoc can wrap the <a ...>
+# open tag onto its own line (the one space between "<a" and "href="), which
+# would otherwise let a real regression hide behind a spuriously-passing
+# refute_contains
+html_nowrap="${html//$'\n'/}"
+refute_contains "code-in-link: no <code> nested inside the <a>" "$html_nowrap" "<a href=\"https://example.com/ISSUE-1\"><code>"
+refute_contains "code-in-link: link is not still followed by a stray </code>" "$html_nowrap" "</code></a>"
+
+rtf=$(read_rtf_flavor)
+assert_contains "code-in-link: RTF still has a hyperlink field" "$rtf" 'HYPERLINK "https://example.com/ISSUE-1"'
+
+# --- same code-in-link fix, but with a URL long enough that pandoc's default
+# line-wrap actually splits the <a ...> open tag across two lines (confirmed
+# empirically: this exact URL reproduces the split with this repo's pandoc
+# invocation). The unwrap logic reads all of stdin at once specifically to
+# handle this case; a fixture too short to ever wrap would pass even if that
+# whole-input read were reverted to line-by-line, so first assert the wrap
+# actually happened before asserting the fix still holds under it ---
+# shellcheck disable=SC2016 # literal backticks, not meant to expand
+printf 'See [`ISSUE-2`](https://example.com/a/rather/long/path/ISSUE-2) now.\n' | pbcopy
+bash "$SCRIPT" >/dev/null
+html=$(read_html_flavor)
+assert_contains "code-in-link (wrapped tag): fixture actually wraps the <a> tag" "$html" $'<a\nhref='
+assert_contains "code-in-link (wrapped tag): href survives" "$html" 'href="https://example.com/a/rather/long/path/ISSUE-2"'
+assert_contains "code-in-link (wrapped tag): link text survives" "$html" ">ISSUE-2</a>"
+html_nowrap="${html//$'\n'/}"
+refute_contains "code-in-link (wrapped tag): no <code> nested inside the <a>" "$html_nowrap" "<a href=\"https://example.com/a/rather/long/path/ISSUE-2\"><code>"
+refute_contains "code-in-link (wrapped tag): link is not still followed by a stray </code>" "$html_nowrap" "</code></a>"
+
 # --- HTML-special characters in the source markdown must come out escaped,
 # not literal — a literal "<" or "&" in the clipboard HTML flavor would be
 # interpreted as a tag/entity start by the paste target instead of the text
@@ -251,10 +293,25 @@ assert_eq "pandoc conversion failure exit code" "4" "$code"
 assert_contains "pandoc conversion failure message" "$out" "conversion failed"
 assert_contains "pandoc conversion failure reports pandoc's stderr" "$out" "stub pandoc failure"
 
+# --- inline-html-styles.pl failure: same stub technique for `perl`, so the
+# HTML pandoc pass succeeds and only the filter step fails. Real perl
+# practically never fails on well-formed pandoc HTML, so this error path is
+# otherwise unreachable from a test ---
+stub_perl=$(mktemp -d)
+trap 'rm -rf "$sandbox" "$sandbox_no_perl" "$stub_pandoc" "$stub_perl"; restore_clipboard' EXIT
+printf '#!/bin/bash\necho "stub perl failure" >&2\nexit 1\n' > "$stub_perl/perl"
+chmod +x "$stub_perl/perl"
+printf '# x' | pbcopy
+out=$(PATH="$stub_perl:$PATH" bash "$SCRIPT" 2>&1)
+code=$?
+assert_eq "inline-html-styles.pl failure exit code" "6" "$code"
+assert_contains "inline-html-styles.pl failure message" "$out" "inline-html-styles.pl failed"
+assert_contains "inline-html-styles.pl failure reports perl's stderr" "$out" "stub perl failure"
+
 # --- clipboard write failure: same stub technique for `osascript`, so
 # everything upstream succeeds and only the JXA pasteboard write fails ---
 stub_osascript=$(mktemp -d)
-trap 'rm -rf "$sandbox" "$sandbox_no_perl" "$stub_pandoc" "$stub_osascript"; restore_clipboard' EXIT
+trap 'rm -rf "$sandbox" "$sandbox_no_perl" "$stub_pandoc" "$stub_perl" "$stub_osascript"; restore_clipboard' EXIT
 printf '#!/bin/bash\necho "stub osascript failure" >&2\nexit 1\n' > "$stub_osascript/osascript"
 chmod +x "$stub_osascript/osascript"
 printf '# x' | pbcopy

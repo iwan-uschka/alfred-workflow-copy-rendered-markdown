@@ -32,6 +32,10 @@
 # produced zero vertical gap between any of them, because Teams' rich-text
 # editor resets those margins to 0. Explicit inline `style` margins survive
 # paste sanitizers far more reliably than relying on the target's CSS.
+#
+# It also unwraps any <code> nested inside an <a> link: Jira and Confluence
+# drop the link when pasted HTML puts code formatting inside it, and keep
+# only the text.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -73,7 +77,9 @@ printf '%s' "$markdown" > "$workdir/input.md"
 if ! pandoc -f "$MD_FORMAT" -t html "$workdir/input.md" -o "$workdir/raw.html" 2>"$workdir/err"; then
   die 4 "pandoc HTML conversion failed: $(cat "$workdir/err")"
 fi
-perl "$SCRIPT_DIR/inline-html-styles.pl" < "$workdir/raw.html" > "$workdir/output.html"
+if ! perl "$SCRIPT_DIR/inline-html-styles.pl" < "$workdir/raw.html" > "$workdir/output.html" 2>"$workdir/err"; then
+  die 6 "inline-html-styles.pl failed: $(cat "$workdir/err")"
+fi
 
 if ! pandoc -f "$MD_FORMAT" -t rtf -s "$workdir/input.md" -o "$workdir/output.rtf" 2>"$workdir/err"; then
   die 4 "pandoc RTF conversion failed: $(cat "$workdir/err")"
