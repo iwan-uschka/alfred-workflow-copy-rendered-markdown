@@ -115,6 +115,37 @@ pandoc's, silently masking a pandoc conversion failure.
   paste into Teams (or any Chromium app) still needs a manual check after
   changing the conversion logic.
 
+**A link whose label is also code-formatted loses its href when pasted into
+Jira or Confluence — a fourth real, reported bug.** Source markdown like
+`` [`ISSUE-1`](url) `` converts to `<a href="url"><code>ISSUE-1</code></a>`
+in the HTML flavor — verified with `osascript -l JavaScript -e
+'ObjC.import("Cocoa");
+$.NSString.alloc.initWithDataEncoding($.NSPasteboard.generalPasteboard.dataForType("public.html"),
+$.NSUTF8StringEncoding).js'` right after running the script — but
+Atlassian's editor (the ADF schema behind both Jira and Confluence) treats
+the `code` mark as mutually exclusive with the `link` mark. Its paste
+handler resolves that conflict by keeping the text and silently dropping
+the link, not by keeping the link and dropping the code style. Confirmed
+2026-09-22 by pasting the identical generated HTML into both a real Jira
+comment box (link gone, plain text left) and Microsoft Teams (link intact)
+— same clipboard content, different result, so this is squarely an ADF-side
+quirk, not something wrong with the generated HTML.
+
+The fix: `scripts/inline-html-styles.pl` also unwraps any `<code>` nested
+inside an `<a>` — `<a href="url"><code>ISSUE-1</code></a>` becomes
+`<a href="url">ISSUE-1</a>` — leaving the surrounding `<em>` and everything
+else untouched. This only touches the HTML flavor; RTF is left alone since
+Word/Notes have no such mark-exclusivity rule and the code styling there
+does no harm. The filter now slurps stdin in one read (`local $/`) instead
+of processing line by line, because pandoc wraps long lines mid-tag — a
+single `<a href="...">` can land split across two lines, which a
+line-by-line regex would never see as one match. Inside the replacement
+block, capture `$1`/`$2`/`$3` into named variables *before* running the
+inner `<code>`-stripping substitution — that inner `s///` is itself a regex
+match and clobbers `$1`/`$2`/`$3` from the outer match if you reference
+them after it runs, which silently drops the link's `href` entirely rather
+than just failing to strip the `<code>`.
+
 ## Conventions
 
 - Keep workflow logic in `scripts/copy-rendered-markdown.sh` as plain,
@@ -144,7 +175,8 @@ pandoc's, silently masking a pandoc conversion failure.
   plain text.
 - `scripts/inline-html-styles.pl` — stdin→stdout filter that injects inline
   `style="margin:…"` onto `<p>`/`<ul>`/`<ol>`/`<li>` in pandoc's HTML
-  output (see "The conversion" above). No dependencies beyond core Perl.
+  output, and unwraps any `<code>` nested inside an `<a>` link (see "The
+  conversion" above). No dependencies beyond core Perl.
 - `test/copy-rendered-markdown.test.sh` — runs the real script against the
   real clipboard/pandoc; no mocking. Self-contained; `bash
   test/copy-rendered-markdown.test.sh` from anywhere. Includes a
@@ -157,7 +189,9 @@ pandoc's, silently masking a pandoc conversion failure.
   plain-text flavor content (not just presence — the RTF flavor is checked
   for a `{\b ...}` run and a `\bullet` marker, the plain-text flavor for
   stripped-but-legible words), HTML-escaping of `<`/`&`/`>` in the source
-  markdown, and a perl-missing exit path (sandboxed separately from the
+  markdown, the code-in-link unwrap (a code-formatted link label keeps its
+  `href` in the HTML flavor and keeps its RTF hyperlink field), and a
+  perl-missing exit path (sandboxed separately from the
   pbpaste/osascript sandbox, since perl is checked in the same combined
   command and a shared sandbox would never isolate it).
 - `test/fixtures/kitchen-sink.md` — the broad markdown fixture above.

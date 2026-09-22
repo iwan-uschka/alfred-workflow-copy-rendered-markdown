@@ -167,6 +167,25 @@ refute_contains "kitchen sink: no leftover bullet syntax" "$html" "- top level"
 refute_contains "kitchen sink: no leftover table pipe syntax" "$html" "| Col A | Col B |"
 refute_contains "kitchen sink: no leftover hr syntax" "$html" "---"
 
+# --- a link whose label is also code-formatted must not carry a nested
+# <code> into the HTML flavor: Atlassian's editor (Jira, Confluence) treats
+# "code" and "link" as mutually exclusive marks and resolves pasted HTML
+# with <code> inside <a> by dropping the link, not the code style — a real,
+# reported bug (confirmed against a real Jira comment box). RTF is left
+# alone: Word/Notes have no such conflict, so the code styling survives
+# there unaffected. ---
+# shellcheck disable=SC2016 # literal backticks, not meant to expand
+printf 'See [`ISSUE-1`](https://example.com/ISSUE-1) for details.\n' | pbcopy
+bash "$SCRIPT" >/dev/null
+html=$(read_html_flavor)
+assert_contains "code-in-link: href survives" "$html" 'href="https://example.com/ISSUE-1"'
+assert_contains "code-in-link: link text survives" "$html" ">ISSUE-1</a>"
+refute_contains "code-in-link: no <code> nested inside the <a>" "$html" "<a href=\"https://example.com/ISSUE-1\"><code>"
+refute_contains "code-in-link: link is not still followed by a stray </code>" "$html" "</code></a>"
+
+rtf=$(read_rtf_flavor)
+assert_contains "code-in-link: RTF still has a hyperlink field" "$rtf" 'HYPERLINK "https://example.com/ISSUE-1"'
+
 # --- HTML-special characters in the source markdown must come out escaped,
 # not literal — a literal "<" or "&" in the clipboard HTML flavor would be
 # interpreted as a tag/entity start by the paste target instead of the text
