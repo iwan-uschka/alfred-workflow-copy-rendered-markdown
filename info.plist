@@ -149,7 +149,7 @@ Requires pandoc (brew install pandoc). macOS only.</string>
 	<key>variablesdontexport</key>
 	<array/>
 	<key>version</key>
-	<string>1.0.0</string>
+	<string>1.0.1</string>
 	<key>webaddress</key>
 	<string>https://github.com/iwan-uschka/alfred-workflow-copy-rendered-markdown</string>
 </dict>
