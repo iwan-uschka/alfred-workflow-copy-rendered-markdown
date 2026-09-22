@@ -169,7 +169,8 @@ than just failing to strip the `<code>`.
 - `scripts/copy-rendered-markdown.sh` — reads clipboard, converts via
   pandoc, writes clipboard back via the JXA helper. Exit codes: 1 empty
   clipboard, 2 pandoc missing, 3 pbpaste/osascript/perl missing, 4 pandoc
-  conversion failed, 5 the JXA clipboard write failed.
+  conversion failed, 5 the JXA clipboard write failed, 6
+  `inline-html-styles.pl` failed.
 - `scripts/write-clipboard.jxa.js` — the multi-flavor pasteboard writer
   (see "The conversion" above). Takes three file paths as argv: HTML, RTF,
   plain text.

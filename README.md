@@ -73,6 +73,10 @@ Teams' rich-text editor resets those margins to 0. Inline `style`
 attributes survive paste sanitizers far more reliably than relying on the
 target's CSS.
 
+It also unwraps any `<code>` nested inside an `<a>` link: Jira and
+Confluence drop the link when pasted HTML puts code formatting inside it,
+and keep only the text.
+
 ## Icon
 
 `icon.png` is derived from the official

@@ -1,6 +1,7 @@
 #!/usr/bin/perl
-# Injects inline `style` margins onto block tags in a pandoc HTML fragment.
-# Reads from stdin, writes to stdout.
+# Injects inline `style` margins onto block tags in a pandoc HTML fragment,
+# and unwraps any <code> nested inside an <a> link. Reads from stdin, writes
+# to stdout.
 #
 # Why: pandoc's fragment output emits bare <p>/<ul>/<ol>/<li> with no
 # attributes, relying on the browser's default user-agent stylesheet for
@@ -38,6 +39,7 @@ my %style = (
 
 local $/;
 my $html = <STDIN>;
+$html = '' unless defined $html;
 
 $html =~ s{<(p|ul|ol|li)((?:\s[^>]*)?)>}{'<' . $1 . $2 . ' style="' . $style{$1} . '">'}ge;
 
