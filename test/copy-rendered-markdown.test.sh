@@ -321,6 +321,36 @@ assert_eq "clipboard write failure exit code" "5" "$code"
 assert_contains "clipboard write failure message" "$out" "writing the clipboard failed"
 assert_contains "clipboard write failure reports the helper's stderr" "$out" "stub osascript failure"
 
+# --- write-clipboard.jxa.js: a flavor file that can't be read (e.g. deleted
+# between conversion and the clipboard write) must make the JXA helper exit
+# non-zero and report which stage failed, not silently write a partial or
+# garbage pasteboard. This exercises the real JXA script directly, unlike
+# the "clipboard write failure" test above, which stubs osascript itself and
+# so never runs write-clipboard.jxa.js's own read/nil-check logic at all.
+# NSData.dataWithContentsOfFile bridges a failed read to an ObjC nil wrapped
+# in a JS object — which is truthy — so this only stays green if the source
+# uses .isNil() rather than a bare falsy check. macOS-only, same as the rest
+# of this suite (osascript throughout). ---
+missing_flavor_dir=$(mktemp -d)
+trap 'rm -rf "$sandbox" "$sandbox_no_perl" "$stub_pandoc" "$stub_perl" "$stub_osascript" "$missing_flavor_dir"; restore_clipboard' EXIT
+printf '<p>ok</p>' > "$missing_flavor_dir/output.html"
+printf '{\\rtf1 ok}' > "$missing_flavor_dir/output.rtf"
+# output.txt is deliberately never created, to exercise the unreadable-file branch
+out=$(osascript -l JavaScript "$SCRIPT_DIR/scripts/write-clipboard.jxa.js" \
+    "$missing_flavor_dir/output.html" "$missing_flavor_dir/output.rtf" "$missing_flavor_dir/output.txt" 2>&1)
+code=$?
+# breaks-if: the isNil() check on htmlData/rtfData/txtData in write-clipboard.jxa.js is removed or replaced with a bare falsy check
+assert_eq "write-clipboard.jxa.js: missing flavor file exit code" "1" "$code"
+assert_contains "write-clipboard.jxa.js: missing flavor file message" "$out" "failed to read one or more clipboard flavor files"
+
+# --- the three setDataForType failure paths (public.html/public.rtf/
+# public.utf8-plain-text) are not independently testable: setDataForType is
+# an in-process Cocoa framework call, not a separate executable on PATH like
+# pandoc or perl, so it can't be stubbed to fail on demand, and it
+# practically never fails for well-formed Data with a standard UTI string.
+# The missing-flavor-file test above is this file's one reachable failure
+# path. ---
+
 echo ""
 echo "${pass} passed, ${fail} failed"
 [ "$fail" -eq 0 ]

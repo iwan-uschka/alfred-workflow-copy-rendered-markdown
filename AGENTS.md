@@ -173,7 +173,14 @@ than just failing to strip the `<code>`.
   `inline-html-styles.pl` failed.
 - `scripts/write-clipboard.jxa.js` — the multi-flavor pasteboard writer
   (see "The conversion" above). Takes three file paths as argv: HTML, RTF,
-  plain text.
+  plain text. Its one independently-testable failure path is a flavor file
+  that can't be read (covered in `test/copy-rendered-markdown.test.sh`,
+  exercising the real script directly rather than stubbing osascript); the
+  three `setDataForType` calls (public.html/public.rtf/public.utf8-plain-text)
+  are not independently testable — `setDataForType` is an in-process Cocoa
+  framework call, not a separate executable on PATH, so it can't be stubbed
+  to fail on demand, and it practically never fails for well-formed Data
+  with a standard UTI string.
 - `scripts/inline-html-styles.pl` — stdin→stdout filter that injects inline
   `style="margin:…"` onto `<p>`/`<ul>`/`<ol>`/`<li>` in pandoc's HTML
   output, and unwraps any `<code>` nested inside an `<a>` link (see "The
@@ -194,7 +201,11 @@ than just failing to strip the `<code>`.
   `href` in the HTML flavor and keeps its RTF hyperlink field), and a
   perl-missing exit path (sandboxed separately from the
   pbpaste/osascript sandbox, since perl is checked in the same combined
-  command and a shared sandbox would never isolate it).
+  command and a shared sandbox would never isolate it), and
+  `write-clipboard.jxa.js`'s missing-flavor-file exit path (a deleted flavor
+  file is read via `NSData.dataWithContentsOfFile`, which bridges a failed
+  read to an ObjC nil that's truthy in JS — the test only stays green if the
+  script checks it with `.isNil()` rather than a bare falsy check).
 - `test/fixtures/kitchen-sink.md` — the broad markdown fixture above.
 - `info.plist` — Alfred workflow definition (objects, connections, config).
 - `build.sh` — zips the workflow into `dist/*.alfredworkflow`.
