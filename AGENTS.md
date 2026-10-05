@@ -12,207 +12,212 @@ syntax. One Bash script does the work; `info.plist` wires it into Alfred.
 copyrmd  →  Keyword input  →  Run Script (copy-rendered-markdown.sh)  →  Notification
 ```
 
-The script itself is source-agnostic: it only reads/writes the clipboard,
-never anything Claude-Code- or app-specific. Don't reintroduce a dependency
-on any particular clipboard producer.
+The script is source-agnostic. It only reads and writes the clipboard,
+never anything specific to Claude Code or another app. Don't reintroduce a
+dependency on any particular clipboard producer.
 
 ## The conversion (important, non-obvious)
 
-**RTF alone is not enough — this was a real, reported bug** (fixed 2026;
+**RTF alone is not enough. This was a real, reported bug** (fixed 2026;
 see git history for `scripts/copy-rendered-markdown.sh`). Chromium/Electron
 apps (Microsoft Teams, Slack) read `text/html` on paste and do not fall back
 to RTF at all. An RTF-only clipboard pastes into them as plain text with the
-markdown syntax already stripped — not literal `**bold**`, and not bold
-either — because macOS synthesizes a plain-text flavor from the RTF's text
-content when nothing else matches, silently discarding the formatting in the
-process. This is easy to miss because RTF renders fine in Word/Mail/Notes/
-TextEdit, so it looks correct until tested in an actual Chromium-based
-target.
+markdown syntax already stripped. The result is neither literal `**bold**`
+nor bold, because macOS synthesizes a plain-text flavor from the RTF's text
+content when nothing else matches and discards the formatting in the
+process. This is easy to miss because RTF renders fine in Word, Mail, Notes
+and TextEdit, so it looks correct until tested in a Chromium-based target.
 
-The fix: write **three** pasteboard flavors in one atomic transaction —
-`public.html`, `public.rtf`, `public.utf8-plain-text` — via
+The fix writes **three** pasteboard flavors in one atomic transaction,
+`public.html`, `public.rtf` and `public.utf8-plain-text`, via
 `scripts/write-clipboard.jxa.js` (JXA + `NSPasteboard.setDataForType`).
-`pbcopy` cannot do this: each invocation calls `clearContents` before writing
-its one flavor, so calling it twice for two different flavors just makes the
-second call win, not add to the first.
+`pbcopy` cannot do this. Each invocation calls `clearContents` before writing
+its one flavor, so calling it twice for two different flavors makes the
+second call win instead of adding to the first.
 
-- `pandoc -f markdown -t html` (no `-s`) for the HTML flavor — a bare
-  fragment (`<h1>…</h1><p>…</p>`), not a standalone document. A full
-  `-s` document's `<style>`/`<head>` is unnecessary bytes on the clipboard
-  and risky: some paste sanitizers handle a bare fragment more predictably
-  than a full document.
-- `pandoc -f markdown -t rtf -s` for the RTF flavor — here `-s` (standalone)
-  IS required. Without it pandoc emits a headerless RTF fragment (starts at
-  `{\pard …` with no `{\rtf1` header) that no app renders correctly.
-- `pandoc -f markdown -t plain` for the plain-text flavor — human-readable
-  prose with markdown syntax already stripped, so a plain-text-only paste
-  target still gets something reasonable instead of literal `**`/`-`/`#`
-  characters.
+- `pandoc -f markdown -t html` (no `-s`) produces the HTML flavor as a bare
+  fragment (`<h1>…</h1><p>…</p>`), not a standalone document. A full `-s`
+  document's `<style>`/`<head>` adds unneeded bytes to the clipboard and
+  carries a risk: some paste sanitizers handle a bare fragment more
+  predictably than a full document.
+- `pandoc -f markdown -t rtf -s` produces the RTF flavor, and here `-s`
+  (standalone) IS required. Without it pandoc emits a headerless RTF
+  fragment (starts at `{\pard …` with no `{\rtf1` header) that no app
+  renders correctly.
+- `pandoc -f markdown -t plain` produces the plain-text flavor. It is
+  readable prose with markdown syntax already stripped, so a plain-text-only
+  paste target still gets something reasonable instead of literal
+  `**`/`-`/`#` characters.
 - All three use
   `-f markdown+hard_line_breaks+lists_without_preceding_blankline`, not
-  plain `markdown` — two separate real, reported bugs:
+  plain `markdown`. Each extension fixes a separate real, reported bug:
   - `+hard_line_breaks`: plain CommonMark treats a single `\n` as a soft
-    wrap and joins the two lines with a space, dropping the break entirely
-    unless there's a blank line between them (`pandoc -f markdown -t html`
-    on `"Line one\nLine two"` produces `<p>Line one Line two</p>`, not two
+    wrap and joins the two lines with a space. The break disappears unless
+    a blank line separates them (`pandoc -f markdown -t html` on
+    `"Line one\nLine two"` produces `<p>Line one Line two</p>`, not two
     lines). Clipboard text almost never comes hard-wrapped as deliberate
-    prose — chat messages, addresses, anything typed with real Enter
-    presses — so every newline needs to survive as an actual line break
-    (`<br>` in HTML, `\line` in RTF). A blank line still starts a genuinely
-    new paragraph either way.
+    prose. Chat messages, addresses and anything typed with real Enter
+    presses need every newline to survive as an actual line break (`<br>`
+    in HTML, `\line` in RTF). A blank line still starts a new paragraph
+    either way.
   - `+lists_without_preceding_blankline`: without it, pandoc's markdown
     reader treats a `- item` line directly after a paragraph line (no
     blank line between them) as a *lazy continuation* of that paragraph,
-    not the start of a list — measured: `"So real internal FQDN:\n- foo\n-
+    not the start of a list. Measured: `"So real internal FQDN:\n- foo\n-
     bar"` produces one `<p>` containing the literal text `- foo - bar`,
     with no `<ul>` at all, not even one with a wrong bullet style. This is
-    a pandoc-specific default (not universal CommonMark behavior) and is
-    easy to miss in testing if your test fixtures always put a blank line
-    before a list out of habit — real chat text usually doesn't.
-- Verifying flavors landed: `osascript -e 'clipboard info'` reports each
-  present type and its byte count (e.g. `«class HTML», 113, «class RTF »,
-  779, «class utf8», 44, string, 44`). To verify *content*, not just
-  presence, read the type directly:
+    a pandoc-specific default (not universal CommonMark behavior). It is
+    easy to miss in testing if your fixtures always put a blank line
+    before a list out of habit. Real chat text usually doesn't.
+- To verify the flavors landed, run `osascript -e 'clipboard info'`. It
+  reports each present type and its byte count (e.g. `«class HTML», 113,
+  «class RTF », 779, «class utf8», 44, string, 44`). To verify *content*,
+  not only presence, read the type directly:
   `osascript -l JavaScript -e 'ObjC.import("Cocoa"); $.NSString.alloc.initWithDataEncoding($.NSPasteboard.generalPasteboard.dataForType("public.html"), $.NSUTF8StringEncoding).js'`.
   `pbpaste -Prefer rtf`/`-Prefer txt` do NOT reliably reflect what's on the
-  pasteboard — measured returning 0 bytes for a flavor that `clipboard info`
-  confirmed was genuinely present.
+  pasteboard. They were measured returning 0 bytes for a flavor that
+  `clipboard info` confirmed was present.
 - `pbcopy -Prefer rtf` (used by the pre-fix, RTF-only version of this
-  script) is a no-op on `pbcopy` — `man pbcopy` documents `-Prefer` for
+  script) is a no-op on `pbcopy`. `man pbcopy` documents `-Prefer` for
   `pbpaste` only; `pbcopy` sets the RTF flavor by sniffing the `{\rtf1`
   header in the input regardless of the flag.
 
-**Block spacing collapses in paste targets with their own editor CSS — a
-third real, reported bug.** pandoc's HTML fragment emits bare
+**Block spacing collapses in paste targets with their own editor CSS. This
+was a third real, reported bug.** pandoc's HTML fragment emits bare
 `<p>`/`<ul>`/`<ol>`/`<li>` with no attributes, so vertical spacing between
 blocks depends entirely on the paste target's default styles for those
 tags. Measured pasting into Microsoft Teams: several paragraphs and a list
 landed with zero gap between any of them, because Teams' rich-text editor
-resets those margins to 0 — confirmed by simulating the same reset
+resets those margins to 0. Simulating the same reset
 (`p, ul, li { margin: 0 }`) in a local browser page and pasting our
-generated HTML into it. `<style>` blocks and CSS classes don't survive most
-paste sanitizers (nothing in the target's own stylesheet resolves a class
-name that isn't defined there), so the fix is `scripts/inline-html-styles.pl`:
-a stdin→stdout Perl filter that injects an inline `style="margin:…"`
-attribute directly onto each `<p>`/`<ul>`/`<ol>`/`<li>` tag in the pandoc
-HTML output before it's written to the clipboard. Inline `style` attributes
-survive sanitizers where classes and stylesheets don't. Pipe pandoc's HTML
-output through it as a separate step (write to a temp file, then filter) —
-don't chain them in one pipeline under `set -o pipefail`, since the
-pipeline's exit status would then reflect the filter's exit code, not
-pandoc's, silently masking a pandoc conversion failure.
+generated HTML into it confirmed this. `<style>` blocks and CSS classes
+don't survive most paste sanitizers (nothing in the target's own stylesheet
+resolves a class name that isn't defined there). The fix is
+`scripts/inline-html-styles.pl`, a stdin-to-stdout Perl filter that injects
+an inline `style="margin:…"` attribute directly onto each
+`<p>`/`<ul>`/`<ol>`/`<li>` tag in the pandoc HTML output before the script
+writes it to the clipboard. Inline `style` attributes survive sanitizers
+where classes and stylesheets don't. Pipe pandoc's HTML output through it as
+a separate step (write to a temp file, then filter). Don't chain them in one
+pipeline under `set -o pipefail`. The pipeline's exit status would then
+reflect the filter's exit code instead of pandoc's, which hides a pandoc
+conversion failure.
 
 - A fully automated "does this actually render in a real Chromium/Electron
-  app" test was attempted and abandoned: Chrome blocks scripted
-  `document.execCommand('paste')`, CDP-dispatched synthetic `Meta+V` key
+  app" test was attempted and abandoned. Chrome blocks scripted
+  `document.execCommand('paste')`. CDP-dispatched synthetic `Meta+V` key
   events did not trigger the browser's native paste handler in this
-  environment (plain unmodified keys worked fine — only the modifier
-  combo silently did nothing), and routing a real OS-level ⌘V through
-  `System Events` requires Accessibility permission for UI scripting
-  (`osascript`), which was not granted and isn't something to request just
-  for a test run. The pasteboard-flavor + content checks in
-  `test/copy-rendered-markdown.test.sh` are the automatable proxy; an actual
-  paste into Teams (or any Chromium app) still needs a manual check after
-  changing the conversion logic.
+  environment (plain unmodified keys worked fine, only the modifier combo
+  did nothing). Routing a real OS-level ⌘V through `System Events` requires
+  Accessibility permission for UI scripting (`osascript`), which was not
+  granted and isn't worth requesting for a test run. The pasteboard-flavor
+  and content checks in `test/copy-rendered-markdown.test.sh` are the
+  automatable proxy. An actual paste into Teams (or any Chromium app) still
+  needs a manual check after changing the conversion logic.
 
 **A link whose label is also code-formatted loses its href when pasted into
-Jira or Confluence — a fourth real, reported bug.** Source markdown like
-`` [`ISSUE-1`](url) `` converts to `<a href="url"><code>ISSUE-1</code></a>`
-in the HTML flavor — verified with `osascript -l JavaScript -e
+Jira or Confluence. This was a fourth real, reported bug.** Source markdown
+like `` [`ISSUE-1`](url) `` converts to
+`<a href="url"><code>ISSUE-1</code></a>` in the HTML flavor, verified with
+`osascript -l JavaScript -e
 'ObjC.import("Cocoa");
 $.NSString.alloc.initWithDataEncoding($.NSPasteboard.generalPasteboard.dataForType("public.html"),
-$.NSUTF8StringEncoding).js'` right after running the script — but
-Atlassian's editor (the ADF schema behind both Jira and Confluence) treats
-the `code` mark as mutually exclusive with the `link` mark. Its paste
-handler resolves that conflict by keeping the text and silently dropping
-the link, not by keeping the link and dropping the code style. Confirmed
-2026-09-22 by pasting the identical generated HTML into both a real Jira
-comment box (link gone, plain text left) and Microsoft Teams (link intact)
-— same clipboard content, different result, so this is squarely an ADF-side
-quirk, not something wrong with the generated HTML.
+$.NSUTF8StringEncoding).js'` right after running the script. Atlassian's
+editor (the ADF schema behind both Jira and Confluence) treats the `code`
+mark as mutually exclusive with the `link` mark. Its paste handler resolves
+that conflict by keeping the text and dropping the link, not by keeping the
+link and dropping the code style. Confirmed 2026-09-22 by pasting the
+identical generated HTML into both a real Jira comment box (link gone,
+plain text left) and Microsoft Teams (link intact). The clipboard content
+was the same and the result differed, so this is an ADF-side quirk, not
+something wrong with the generated HTML.
 
 The fix: `scripts/inline-html-styles.pl` also unwraps any `<code>` nested
-inside an `<a>` — `<a href="url"><code>ISSUE-1</code></a>` becomes
-`<a href="url">ISSUE-1</a>` — leaving the surrounding `<em>` and everything
-else untouched. This only touches the HTML flavor; RTF is left alone since
-Word/Notes have no such mark-exclusivity rule and the code styling there
-does no harm. The filter now slurps stdin in one read (`local $/`) instead
-of processing line by line, because pandoc wraps long lines mid-tag — a
-single `<a href="...">` can land split across two lines, which a
-line-by-line regex would never see as one match. Inside the replacement
-block, capture `$1`/`$2`/`$3` into named variables *before* running the
-inner `<code>`-stripping substitution — that inner `s///` is itself a regex
-match and clobbers `$1`/`$2`/`$3` from the outer match if you reference
-them after it runs, which silently drops the link's `href` entirely rather
-than just failing to strip the `<code>`.
+inside an `<a>`, so `<a href="url"><code>ISSUE-1</code></a>` becomes
+`<a href="url">ISSUE-1</a>`. It leaves the surrounding `<em>` and
+everything else untouched. This only touches the HTML flavor. RTF stays as
+is, since Word and Notes have no such mark-exclusivity rule and the code
+styling there does no harm. The filter now slurps stdin in one read
+(`local $/`) instead of processing line by line, because pandoc wraps long
+lines mid-tag. A single `<a href="...">` can land split across two lines,
+which a line-by-line regex would never see as one match. Inside the
+replacement block, capture `$1`/`$2`/`$3` into named variables *before*
+running the inner `<code>`-stripping substitution. That inner `s///` is
+itself a regex match and clobbers `$1`/`$2`/`$3` from the outer match if
+you reference them after it runs. The result drops the link's `href`
+entirely instead of only failing to strip the `<code>`.
 
 ## Conventions
 
 - Keep workflow logic in `scripts/copy-rendered-markdown.sh` as plain,
-  testable Bash. Do not inline logic into `info.plist` — the plist only
+  testable Bash. Do not inline logic into `info.plist`. The plist only
   calls `./scripts/copy-rendered-markdown.sh`.
 - After editing the script, lint it: `shellcheck scripts/*.sh build.sh
   make_release.sh test/*.test.sh`.
 - After editing `info.plist`, validate it: `plutil -lint info.plist`.
 - After editing conversion logic, run `bash
-  test/copy-rendered-markdown.test.sh` — and sanity-check the test itself
-  catches a regression by reverting the change under test and confirming it
-  now fails (that's how the original RTF-only bug was confirmed fixed).
+  test/copy-rendered-markdown.test.sh`. Also check that the test catches a
+  regression: revert the change under test and confirm the test now fails
+  (that's how the original RTF-only bug was confirmed fixed).
 - Repackage with `./build.sh` after any change to shipped files.
-- Cut a release with `bash make_release.sh x.y.z` — it bumps `info.plist`'s
+- Cut a release with `bash make_release.sh x.y.z`. It bumps `info.plist`'s
   version, builds the versioned `.alfredworkflow` + checksum in `dist/`, and
   prints the commit/push/`gh release create` commands to run manually. It
   never commits, tags, or publishes on its own.
 
 ## Files
 
-- `scripts/copy-rendered-markdown.sh` — reads clipboard, converts via
-  pandoc, writes clipboard back via the JXA helper. Exit codes: 1 empty
-  clipboard, 2 pandoc missing, 3 pbpaste/osascript/perl missing, 4 pandoc
-  conversion failed, 5 the JXA clipboard write failed, 6
+- `scripts/copy-rendered-markdown.sh` reads the clipboard, converts via
+  pandoc, and writes the clipboard back via the JXA helper. Exit codes: 1
+  empty clipboard, 2 pandoc missing, 3 pbpaste/osascript/perl missing, 4
+  pandoc conversion failed, 5 the JXA clipboard write failed, 6
   `inline-html-styles.pl` failed.
-- `scripts/write-clipboard.jxa.js` — the multi-flavor pasteboard writer
-  (see "The conversion" above). Takes three file paths as argv: HTML, RTF,
-  plain text. Its one independently-testable failure path is a flavor file
-  that can't be read (covered in `test/copy-rendered-markdown.test.sh`,
-  exercising the real script directly rather than stubbing osascript); the
+- `scripts/write-clipboard.jxa.js` is the multi-flavor pasteboard writer
+  (see "The conversion" above). It takes three file paths as argv: HTML,
+  RTF, plain text. Its one independently testable failure path is a flavor
+  file that can't be read (covered in `test/copy-rendered-markdown.test.sh`,
+  which runs the real script directly instead of stubbing osascript). The
   three `setDataForType` calls (public.html/public.rtf/public.utf8-plain-text)
-  are not independently testable — `setDataForType` is an in-process Cocoa
+  are not independently testable. `setDataForType` is an in-process Cocoa
   framework call, not a separate executable on PATH, so it can't be stubbed
   to fail on demand, and it practically never fails for well-formed Data
   with a standard UTI string.
-- `scripts/inline-html-styles.pl` — stdin→stdout filter that injects inline
-  `style="margin:…"` onto `<p>`/`<ul>`/`<ol>`/`<li>` in pandoc's HTML
-  output, and unwraps any `<code>` nested inside an `<a>` link (see "The
-  conversion" above). No dependencies beyond core Perl.
-- `test/copy-rendered-markdown.test.sh` — runs the real script against the
-  real clipboard/pandoc; no mocking. Self-contained; `bash
-  test/copy-rendered-markdown.test.sh` from anywhere. Includes a
+- `scripts/inline-html-styles.pl` is a stdin-to-stdout filter that injects
+  inline `style="margin:…"` onto `<p>`/`<ul>`/`<ol>`/`<li>` in pandoc's HTML
+  output and unwraps any `<code>` nested inside an `<a>` link (see "The
+  conversion" above). It needs nothing beyond core Perl.
+- `test/copy-rendered-markdown.test.sh` runs the real script against the
+  real clipboard and pandoc, with no mocking. It is self-contained; run
+  `bash test/copy-rendered-markdown.test.sh` from anywhere. It includes a
   kitchen-sink section (`test/fixtures/kitchen-sink.md`) covering headings,
   bold/italic/bold-italic, inline code, links, nested bullet and ordered
   lists, blockquotes, fenced code blocks, tables and horizontal rules in one
-  document — broader coverage than the targeted single-construct tests, so a
-  regression in a construct none of those touch (tables, blockquotes, nested
-  lists, code blocks, links) still gets caught. Also covers: RTF and
-  plain-text flavor content (not just presence — the RTF flavor is checked
-  for a `{\b ...}` run and a `\bullet` marker, the plain-text flavor for
-  stripped-but-legible words), HTML-escaping of `<`/`&`/`>` in the source
-  markdown, the code-in-link unwrap (a code-formatted link label keeps its
-  `href` in the HTML flavor and keeps its RTF hyperlink field), and a
-  perl-missing exit path (sandboxed separately from the
-  pbpaste/osascript sandbox, since perl is checked in the same combined
-  command and a shared sandbox would never isolate it), and
-  `write-clipboard.jxa.js`'s missing-flavor-file exit path (a deleted flavor
-  file is read via `NSData.dataWithContentsOfFile`, which bridges a failed
-  read to an ObjC nil that's truthy in JS — the test only stays green if the
-  script checks it with `.isNil()` rather than a bare falsy check).
-- `test/fixtures/kitchen-sink.md` — the broad markdown fixture above.
-- `info.plist` — Alfred workflow definition (objects, connections, config).
-- `build.sh` — zips the workflow into `dist/*.alfredworkflow`.
-- `make_release.sh` — bumps the version, builds the versioned artifact +
+  document. That section covers more than the targeted single-construct
+  tests, so it still catches a regression in a construct none of those
+  touch (tables, blockquotes, nested lists, code blocks, links). The test
+  also covers:
+  - RTF and plain-text flavor content, not only presence. It checks the RTF
+    flavor for a `{\b ...}` run and a `\bullet` marker, and the plain-text
+    flavor for stripped but legible words.
+  - HTML-escaping of `<`/`&`/`>` in the source markdown.
+  - The code-in-link unwrap. A code-formatted link label keeps its `href`
+    in the HTML flavor and keeps its RTF hyperlink field.
+  - A perl-missing exit path, sandboxed separately from the
+    pbpaste/osascript sandbox. The script checks perl in the same combined
+    command, so a shared sandbox would never isolate it.
+  - `write-clipboard.jxa.js`'s missing-flavor-file exit path. The script
+    reads a deleted flavor file via `NSData.dataWithContentsOfFile`, which
+    bridges a failed read to an ObjC nil that's truthy in JS. The test only
+    stays green if the script checks it with `.isNil()` instead of a bare
+    falsy check.
+- `test/fixtures/kitchen-sink.md` is the broad markdown fixture above.
+- `info.plist` is the Alfred workflow definition (objects, connections,
+  config).
+- `build.sh` zips the workflow into `dist/*.alfredworkflow`.
+- `make_release.sh` bumps the version, builds the versioned artifact +
   checksum, and prints the release commands to run manually.
-- `icon.png` — bundled automatically by `build.sh` if present (Alfred reads
-  it from the bundle root by convention, no `info.plist` key needed).
-  Derived from the official Markdown mark (CC0) by Dustin Curtis
+- `icon.png` is bundled automatically by `build.sh` if present (Alfred reads
+  it from the bundle root by convention, no `info.plist` key needed). It is
+  derived from the official Markdown mark (CC0) by Dustin Curtis
   (https://en.wikipedia.org/wiki/File:Markdown-mark.svg), re-centered onto a
   padded square canvas to match a typical app-icon composition.
